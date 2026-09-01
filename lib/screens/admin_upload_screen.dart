@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -33,28 +31,25 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
   bool _publishing = false;
 
   Future<void> _pickPdf() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
-      withData: false,
     );
 
-    if (result != null && result.files.isNotEmpty) {
-      setState(() => _pdfFile = result.files.first);
+    if (file != null) {
+      setState(() => _pdfFile = file);
     }
   }
 
   Future<void> _pickCover() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
+    final file = await FilePicker.pickFile(type: FileType.image);
 
-    if (result != null && result.files.isNotEmpty) {
-      final file = result.files.first;
+    if (file != null) {
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
       setState(() {
         _coverFile = file;
-        _coverBytes = file.bytes;
+        _coverBytes = bytes;
       });
     }
   }
@@ -134,7 +129,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
-                value: _category,
+                initialValue: _category,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   prefixIcon: Icon(Icons.category_outlined),
