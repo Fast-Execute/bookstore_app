@@ -128,7 +128,7 @@ class _BookStoreHomeState extends State<BookStoreHome> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
                     itemBuilder: (_, index) {
                       final item = categories[index];
                       final selected = item == category;
@@ -168,9 +168,9 @@ class _BookStoreHomeState extends State<BookStoreHome> {
           ),
         ),
       ),
-      bottomNavigationBar: const NavigationBar(
+      bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
-        destinations: [
+        destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
           NavigationDestination(icon: Icon(Icons.menu_book_outlined), label: 'Books'),
           NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Favorites'),
