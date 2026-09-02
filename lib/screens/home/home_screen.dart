@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/book.dart';
 import '../../data/repositories/book_repository.dart';
+import '../admin/admin_login_screen.dart';
 import '../admin/admin_upload_screen.dart';
 import '../book_details/book_details_screen.dart';
 
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String category = 'All';
   String search = '';
+  int _adminTapCount = 0;
 
   late Future<List<Book>> _booksFuture;
 
@@ -46,23 +48,51 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _handleAdminTap() {
+    _adminTapCount++;
+
+    if (_adminTapCount >= 7) {
+      _adminTapCount = 0;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const AdminLoginScreen(),
+        ),
+      );
+
+      return;
+    }
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted && _adminTapCount < 7) {
+        setState(() {
+          _adminTapCount = 0;
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F5F0),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.auto_stories_rounded,
               color: Color(0xFF5B3A29),
             ),
-            SizedBox(width: 10),
-            Text(
-              'BOOK HAVEN',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: _handleAdminTap,
+              child: const Text(
+                'BOOK HAVEN',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                ),
               ),
             ),
           ],
@@ -546,3 +576,7 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
+
+
+
+
