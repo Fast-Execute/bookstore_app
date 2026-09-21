@@ -1,7 +1,18 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'data/services/supabase_service.dart';
+import 'screens/admin/admin_reset_password_screen.dart';
 import 'screens/home/home_screen.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey =
+    GlobalKey<NavigatorState>();
+
+StreamSubscription<AuthState>? _authSubscription;
+StreamSubscription<Uri>? _linkSubscription;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,9 +26,38 @@ Future<void> main() async {
       url: supabaseUrl,
       publishableKey: supabasePublishableKey,
     );
+
+    _authSubscription =
+        SupabaseService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        _openResetScreen();
+      }
+    });
+
+    final appLinks = AppLinks();
+
+    _linkSubscription = appLinks.uriLinkStream.listen((uri) {
+      if (uri.scheme == 'io.bookstore.app' &&
+          uri.host == 'reset-password') {
+        _openResetScreen();
+      }
+    });
   }
 
   runApp(const BookStoreApp());
+}
+
+void _openResetScreen() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) return;
+
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => const AdminResetPasswordScreen(),
+      ),
+    );
+  });
 }
 
 class BookStoreApp extends StatelessWidget {
@@ -26,6 +66,7 @@ class BookStoreApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Book Haven',
       theme: ThemeData(
