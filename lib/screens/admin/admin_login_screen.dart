@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/services/supabase_service.dart';
+import '../../data/services/auth_service.dart;
 import 'admin_dashboard_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -89,6 +90,35 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      _showMessage('Enter your admin email first.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService.sendPasswordResetEmail(email);
+
+      if (mounted) {
+        _showMessage(
+          'Password reset link sent. Check your email and open the link on this device.',
+        );
+      }
+    } on AuthException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Unable to send the reset email. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -216,7 +246,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _forgotPassword,
+                      icon: const Icon(Icons.lock_reset_rounded),
+                      label: const Text('Forgot password?'),
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
                       'Authorized administrators only.',
                       textAlign: TextAlign.center,
