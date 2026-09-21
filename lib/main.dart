@@ -13,6 +13,7 @@ final GlobalKey<NavigatorState> appNavigatorKey =
 
 StreamSubscription<AuthState>? _authSubscription;
 StreamSubscription<Uri>? _linkSubscription;
+bool _resetScreenOpening = false;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,9 +37,15 @@ Future<void> main() async {
 
     final appLinks = AppLinks();
 
+    // Handle a reset link that launches the app from a cold start.
+    final initialUri = await appLinks.getInitialLink();
+    if (_isResetUri(initialUri)) {
+      _openResetScreen();
+    }
+
+    // Handle a reset link while the app is already running.
     _linkSubscription = appLinks.uriLinkStream.listen((uri) {
-      if (uri.scheme == 'io.bookstore.app' &&
-          uri.host == 'reset-password') {
+      if (_isResetUri(uri)) {
         _openResetScreen();
       }
     });
@@ -47,16 +54,32 @@ Future<void> main() async {
   runApp(const BookStoreApp());
 }
 
+bool _isResetUri(Uri? uri) {
+  return uri != null &&
+      uri.scheme == 'io.bookstore.app' &&
+      uri.host == 'reset-password';
+}
+
 void _openResetScreen() {
+  if (_resetScreenOpening) return;
+  _resetScreenOpening = true;
+
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final navigator = appNavigatorKey.currentState;
-    if (navigator == null) return;
+    if (navigator == null) {
+      _resetScreenOpening = false;
+      return;
+    }
 
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => const AdminResetPasswordScreen(),
-      ),
-    );
+    navigator
+        .push(
+          MaterialPageRoute(
+            builder: (_) => const AdminResetPasswordScreen(),
+          ),
+        )
+        .whenComplete(() {
+          _resetScreenOpening = false;
+        });
   });
 }
 
