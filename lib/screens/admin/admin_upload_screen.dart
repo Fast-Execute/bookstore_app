@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/services/book_service.dart';
+import '../../data/services/storage_service.dart';
+
 class AdminUploadScreen extends StatefulWidget {
   const AdminUploadScreen({super.key});
 
@@ -14,8 +17,10 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
-  final _priceController = TextEditingController();
+  final _priceController = TextEditingController(text: '0');
   final _descriptionController = TextEditingController();
+
+  final _bookService = BookService();
 
   final List<String> _categories = const [
     'Fiction',
@@ -28,59 +33,94 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
 
   String _category = 'Fiction';
   PlatformFile? _pdfFile;
-  PlatformFile? _coverFile;
-  Uint8List? _coverBytes;
+  Uint8List? _pdfBytes;
   bool _publishing = false;
 
   Future<void> _pickPdf() async {
-    final file = await FilePicker.pickFile(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
+      withData: true,
     );
 
-    if (file != null) {
-      setState(() => _pdfFile = file);
-    }
-  }
+    if (result == null || result.files.isEmpty) return;
 
-  Future<void> _pickCover() async {
-    final file = await FilePicker.pickFile(type: FileType.image);
+    final file = result.files.single;
+    final bytes = file.bytes ?? await file.readAsBytes();
 
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-      setState(() {
-        _coverFile = file;
-        _coverBytes = bytes;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _pdfFile = file;
+      _pdfBytes = bytes;
+    });
   }
 
   Future<void> _publishBook() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_pdfFile == null || _coverFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select both the PDF book and cover image.'),
-        ),
-      );
+    if (_pdfFile == null || _pdfBytes == null) {
+      _showMessage('Please choose the PDF book before publishing.');
+      return;
+    }
+
+    final price = double.tryParse(_priceController.text.trim());
+    if (price == null || price < 0) {
+      _showMessage('Enter a valid price in ZAR.');
       return;
     }
 
     setState(() => _publishing = true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
 
-    if (!mounted) return;
-    setState(() => _publishing = false);
+    String? uploadedPath;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Book details validated. Cloud publishing will be connected next.',
-        ),
-      ),
-    );
+    try {
+      uploadedPath = await StorageService.uploadBookPdf(
+        bytes: _pdfBytes!,
+        fileName: _pdfFile!.name,
+      );
+
+      await _bookService.createBook(
+        title: _titleController.text,
+        author: _authorController.text,
+        category: _category,
+        description: _descriptionController.text,
+        priceZar: price,
+        pdfPath: uploadedPath,
+      );
+
+      if (!mounted) return;
+
+      _showMessage('Book uploaded and published successfully.');
+
+      setState(() {
+        _pdfFile = null;
+        _pdfBytes = null;
+        _titleController.clear();
+        _authorController.clear();
+        _priceController.text = '0';
+        _descriptionController.clear();
+        _category = _categories.first;
+      });
+    } catch (error) {
+      if (uploadedPath != null) {
+        try {
+          await StorageService.deleteBookPdf(uploadedPath);
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        _showMessage('Upload failed: ' + error.toString());
+      }
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -98,7 +138,7 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin • Upload Book'),
+        title: const Text('BookWorm • Library Admin'),
       ),
       body: SafeArea(
         child: Form(
@@ -107,14 +147,14 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Add a new book',
+                'Add book to library',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Prepare the book for the private cloud catalogue.',
+                'Upload the PDF and create its catalogue record in Supabase.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 24),
@@ -145,9 +185,13 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
                       ),
                     )
                     .toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _category = value);
-                },
+                onChanged: _publishing
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          setState(() => _category = value);
+                        }
+                      },
               ),
               const SizedBox(height: 14),
               _field(
@@ -168,26 +212,18 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
               const SizedBox(height: 22),
               _uploadTile(
                 title: 'Digital book (PDF)',
-                subtitle: _pdfFile?.name ?? 'Choose the customer PDF',
+                subtitle: _pdfFile?.name ?? 'Choose the PDF to upload',
                 icon: Icons.picture_as_pdf_outlined,
-                onPressed: _pickPdf,
+                onPressed: _publishing ? () {} : _pickPdf,
               ),
-              const SizedBox(height: 12),
-              _uploadTile(
-                title: 'Cover image',
-                subtitle: _coverFile?.name ?? 'Choose the book cover',
-                icon: Icons.image_outlined,
-                onPressed: _pickCover,
-              ),
-              if (_coverBytes != null) ...[
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.memory(
-                    _coverBytes!,
-                    height: 240,
-                    fit: BoxFit.contain,
+              if (_pdfFile != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _pdfFile!.name + ' • ' + _formatBytes(
+                    _pdfBytes?.length ?? _pdfFile!.size,
                   ),
+                  style: theme.textTheme.bodySmall,
+                  textAlign: TextAlign.center,
                 ),
               ],
               const SizedBox(height: 26),
@@ -202,12 +238,14 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.cloud_upload_outlined),
-                  label: Text(_publishing ? 'Preparing…' : 'Publish Book'),
+                  label: Text(
+                    _publishing ? 'Uploading PDF…' : 'Upload & Publish Book',
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
-                'Security note: paid PDFs will be stored privately. GitHub is only for the application code.',
+                'PDF files are stored in the private Supabase “books” bucket. Do not put paid books in GitHub.',
                 style: theme.textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
@@ -229,10 +267,9 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      enabled: !_publishing,
       validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'Required';
-        }
+        if (value == null || value.trim().isEmpty) return 'Required';
         return null;
       },
       decoration: InputDecoration(
@@ -265,9 +302,17 @@ class _AdminUploadScreenState extends State<AdminUploadScreen> {
         ),
         trailing: OutlinedButton(
           onPressed: onPressed,
-          child: const Text('Choose'),
+          child: const Text('Choose PDF'),
         ),
       ),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return bytes.toString() + ' B';
+    if (bytes < 1024 * 1024) {
+      return (bytes / 1024).toStringAsFixed(1) + ' KB';
+    }
+    return (bytes / (1024 * 1024)).toStringAsFixed(1) + ' MB';
   }
 }
